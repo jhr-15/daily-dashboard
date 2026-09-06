@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#111827">
+<title>Daily Dashboard</title>
+<style>
+:root{
+  --bg:#f4f6f8; --card:#fff; --text:#17202a; --muted:#6b7280;
+  --line:#e5e7eb; --accent:#6d5dfc; --accent2:#8b7cff;
+  --green:#22a06b; --red:#ef5350; --shadow:0 12px 35px rgba(20,25,40,.08);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+button,input{font:inherit}
+button{cursor:pointer}
+.app{max-width:1050px;margin:auto;padding:24px}
+header{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:22px}
+h1{font-size:28px;margin:0 0 5px}.date{color:var(--muted)}
+.clock{font-weight:700;font-size:18px}
+.grid{display:grid;grid-template-columns:1.5fr .8fr;gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:var(--shadow)}
+.progress-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.progress{height:11px;background:#ececf4;border-radius:99px;overflow:hidden}
+.progress>div{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%;transition:.3s}
+.tasks{margin-top:18px;display:flex;flex-direction:column;gap:9px}
+.task{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1px solid var(--line);border-radius:14px;transition:.2s}
+.task:hover{transform:translateY(-1px);box-shadow:0 5px 15px rgba(0,0,0,.05)}
+.check{width:22px;height:22px;border:2px solid #c9ccd4;border-radius:7px;display:grid;place-items:center;flex:none}
+.task.done .check{background:var(--green);border-color:var(--green);color:#fff}
+.task.done .label{text-decoration:line-through;color:#9ca3af}
+.label{flex:1}.tag{font-size:11px;padding:4px 8px;border-radius:999px;background:#f0efff;color:#5548d6}
+.delete{border:0;background:none;color:#aaa;font-size:18px}
+h2{font-size:18px;margin:0 0 14px}
+.stat{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line)}
+.stat:last-child{border:0}
+.big{font-size:34px;font-weight:800}
+.priority{display:flex;gap:9px;margin-bottom:9px}
+.priority input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:11px;outline:none}
+.addrow{display:flex;gap:9px;margin-top:15px}
+.addrow input{flex:1;padding:11px 13px;border:1px solid var(--line);border-radius:11px;outline:none}
+.primary{border:0;background:var(--accent);color:white;border-radius:11px;padding:10px 15px;font-weight:700}
+.secondary{border:1px solid var(--line);background:white;border-radius:11px;padding:9px 13px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.history{margin-top:18px}
+.history-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}
+.day{text-align:center;font-size:11px;color:var(--muted)}
+.dot{height:28px;margin-top:5px;border-radius:8px;background:#eee}.dot.good{background:#86d8b2}.dot.ok{background:#f5d88a}.dot.bad{background:#f5a6a4}
+.empty{color:var(--muted);text-align:center;padding:22px}
+footer{text-align:center;color:#9ca3af;font-size:12px;padding:22px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}.app{padding:15px}header{align-items:flex-start}.clock{font-size:14px}.card{padding:17px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div><h1>Daily Dashboard</h1><div class="date" id="date"></div></div>
+  <div class="clock" id="clock"></div>
+</header>
+
+<div class="grid">
+<main>
+<section class="card">
+  <div class="progress-head"><strong>Today's Progress</strong><strong id="progressText">0%</strong></div>
+  <div class="progress"><div id="bar"></div></div>
+  <div class="tasks" id="tasks"></div>
+  <div class="addrow">
+    <input id="newTask" placeholder="Add a task for today..." />
+    <button class="primary" onclick="addTask()">Add</button>
+  </div>
+  <div class="actions">
+    <button class="secondary" onclick="resetToday()">Reset today</button>
+    <button class="secondary" onclick="clearCompleted()">Clear completed</button>
+  </div>
+</section>
+
+<section class="card history">
+  <h2>Last 7 Days</h2>
+  <div class="history-grid" id="history"></div>
+</section>
+</main>
+
+<aside>
+<section class="card">
+  <h2>Today's Priorities</h2>
+  <div id="priorities"></div>
+</section>
+
+<section class="card" style="margin-top:18px">
+  <h2>Stats</h2>
+  <div class="stat"><span>Completed</span><strong id="completed">0</strong></div>
+  <div class="stat"><span>Total tasks</span><strong id="total">0</strong></div>
+  <div class="stat"><span>Current streak</span><strong>🔥 <span id="streak">0</span> days</strong></div>
+</section>
+</aside>
+</div>
+<footer>Your data stays in this browser. Nothing is uploaded anywhere.</footer>
+</div>
+
+<script>
+const KEY='daily-dashboard-v1';
+const today=()=>new Date().toISOString().slice(0,10);
+let db=JSON.parse(localStorage.getItem(KEY)||'{}');
+
+const defaults=[
+  ['Morning routine','Personal'],['University / study','Study'],
+  ['Python / Data Science','Study'],['Walk / exercise','Health'],
+  ['University work','Work'],['Read 20 pages','Personal'],
+  ['Plan tomorrow','Personal'],['Sleep on time','Health']
+];
+
+function save(){localStorage.setItem(KEY,JSON.stringify(db))}
+function ensure(){
+  const d=today();
+  if(!db[d]) db[d]={tasks:defaults.map((x,i)=>({id:i+1,label:x[0],tag:x[1],done:false})),priorities:['','','']};
+  if(!db[d].priorities) db[d].priorities=['','',''];
+  save();
+}
+function render(){
+  ensure(); const d=db[today()], tasks=d.tasks;
+  document.getElementById('date').textContent=new Date().toLocaleDateString(undefined,{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const done=tasks.filter(x=>x.done).length, pct=tasks.length?Math.round(done/tasks.length*100):0;
+  document.getElementById('progressText').textContent=pct+'%';
+  document.getElementById('bar').style.width=pct+'%';
+  document.getElementById('completed').textContent=done;
+  document.getElementById('total').textContent=tasks.length;
+  document.getElementById('streak').textContent=streak();
+
+  const box=document.getElementById('tasks'); box.innerHTML='';
+  if(!tasks.length) box.innerHTML='<div class="empty">No tasks today. Enjoy the suspicious amount of free time.</div>';
+  tasks.forEach(t=>{
+    const el=document.createElement('div'); el.className='task '+(t.done?'done':'');
+    el.innerHTML=`<div class="check">${t.done?'✓':''}</div><div class="label">${escapeHtml(t.label)}</div><span class="tag">${escapeHtml(t.tag||'Task')}</span><button class="delete" title="Delete">×</button>`;
+    el.querySelector('.check').onclick=()=>{t.done=!t.done;save();render()};
+    el.querySelector('.delete').onclick=()=>{d.tasks=d.tasks.filter(x=>x.id!==t.id);save();render()};
+    box.appendChild(el);
+  });
+
+  const p=document.getElementById('priorities'); p.innerHTML='';
+  d.priorities.forEach((v,i)=>{
+    const row=document.createElement('div'); row.className='priority';
+    row.innerHTML=`<input value="${escapeAttr(v)}" placeholder="Priority ${i+1}">`;
+    row.querySelector('input').oninput=e=>{d.priorities[i]=e.target.value;save()};
+    p.appendChild(row);
+  });
+  renderHistory();
+}
+function addTask(){
+  const input=document.getElementById('newTask'), label=input.value.trim(); if(!label)return;
+  const d=db[today()]; d.tasks.push({id:Date.now(),label,tag:'Custom',done:false});
+  input.value='';save();render();input.focus();
+}
+document.getElementById('newTask').addEventListener('keydown',e=>{if(e.key==='Enter')addTask()});
+function resetToday(){if(confirm('Reset all tasks for today?')){db[today()].tasks.forEach(t=>t.done=false);save();render()}}
+function clearCompleted(){db[today()].tasks=db[today()].tasks.filter(t=>!t.done);save();render()}
+function streak(){
+  let s=0, d=new Date();
+  while(true){
+    const k=d.toISOString().slice(0,10), x=db[k];
+    if(!x || !x.tasks.length || x.tasks.some(t=>!t.done)) break;
+    s++; d.setDate(d.getDate()-1);
+  } return s;
+}
+function renderHistory(){
+  const box=document.getElementById('history'); box.innerHTML='';
+  for(let i=6;i>=0;i--){
+    const d=new Date();d.setDate(d.getDate()-i);const k=d.toISOString().slice(0,10),x=db[k];
+    let cls='',score='';
+    if(x&&x.tasks.length){const p=x.tasks.filter(t=>t.done).length/x.tasks.length;score=Math.round(p*100)+'%';cls=p>=.8?'good':p>=.5?'ok':'bad'}
+    const el=document.createElement('div');el.className='day';
+    el.innerHTML=`${d.toLocaleDateString(undefined,{weekday:'short'})}<div class="dot ${cls}" title="${score}">${score}</div>`;
+    box.appendChild(el);
+  }
+}
+function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function escapeAttr(s){return escapeHtml(s)}
+function clock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+ensure();render();clock();setInterval(clock,1000);
+</script>
+</body>
+</html>
